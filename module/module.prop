@@ -1,0 +1,6 @@
+id=hellozygisk
+name=Hello Zygisk
+version=v1.0.0
+versionCode=1
+author=GameSecurityLearner
+description=My first Zygisk module - prints current time on app start

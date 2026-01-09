@@ -1,0 +1,16 @@
+# Build artifacts
+libs/
+obj/
+*.o
+*.so
+*.a
+*.zip
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
