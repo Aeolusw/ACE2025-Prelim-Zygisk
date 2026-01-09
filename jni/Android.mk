@@ -14,7 +14,7 @@ LOCAL_SRC_FILES := main.cpp
 LOCAL_LDLIBS := -llog # -llog是NDK的宏，链接log库
 
 # C++ 标准
-LOCAL_CPPFLAGS := -std=c++17
+LOCAL_CPPFLAGS := -std=c++20
 
 # 编译为共享库
 include $(BUILD_SHARED_LIBRARY)

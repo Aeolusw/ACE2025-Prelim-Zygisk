@@ -1,16 +1,16 @@
-# Build artifacts
 libs/
 obj/
 *.o
 *.so
-*.a
 *.zip
+HelloZygisk.zip
 
-# IDE/Editor
+# IDE / Editor
 .vscode/
 .idea/
+.clangd
 *.swp
 
-# OS
-Thumbs.db
-Desktop.ini
+# System
+thumbs.db
+.DS_Store
