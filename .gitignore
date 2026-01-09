@@ -1,16 +1,20 @@
+# Build artifacts
 libs/
 obj/
-*.o
-*.so
+bin/
+gen/
+build/
+.cxx/
+cmake-build-*/
 *.zip
 HelloZygisk.zip
 
 # IDE / Editor
 .vscode/
 .idea/
-.clangd
-*.swp
+*.iml
+local.properties
 
-# System
-thumbs.db
+# OS
 .DS_Store
+Thumbs.db

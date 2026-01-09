@@ -1,118 +1,113 @@
 # ============================================
-# Zygisk Module Build Script
+# Zygisk Module Build Script (Refined)
 # Usage: .\build.ps1
 # ============================================
 
 $ErrorActionPreference = "Stop"
 
 # ========== Configuration ==========
-# NDK path (auto-detected)
 $ndkPath = "$env:LOCALAPPDATA\Android\Sdk\ndk\29.0.14206865"
-
-# If the path above is wrong, manually set it here:
-# $ndkPath = "C:\Your\NDK\Path"
-
 if (-not (Test-Path $ndkPath)) {
     Write-Host "[ERROR] NDK not found at: $ndkPath" -ForegroundColor Red
-    Write-Host "Please edit build.ps1 and set the correct NDK path" -ForegroundColor Yellow
     exit 1
 }
 
-$ndkBuild = Join-Path $ndkPath "ndk-build.cmd"
-$projectDir = $PSScriptRoot # $PSScriptRoot是当前脚本的目录
-$moduleDir = Join-Path $projectDir "module"
-$outputZip = Join-Path $projectDir "HelloZygisk.zip"
+# Find CMake & Ninja
+function Get-CMakePath {
+    $cmakePath = Get-Command cmake -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+    if ($cmakePath) { return $cmakePath }
+    # Try Android SDK
+    $sdkCmake = Get-ChildItem -Path "$env:LOCALAPPDATA\Android\Sdk\cmake" -Recurse -Filter cmake.exe -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+    return $sdkCmake
+}
+
+$cmakeExe = Get-CMakePath
+if (-not $cmakeExe) {
+    Write-Host "[ERROR] CMake not found!" -ForegroundColor Red
+    exit 1
+}
+# Add CMake bin to PATH for Ninja detection
+$cmakeBin = Split-Path $cmakeExe -Parent
+$env:PATH = "$cmakeBin;$env:PATH"
+
+# Paths
+$projectDir = $PSScriptRoot
+$cppDir     = Join-Path $projectDir "module\src\main\cpp"
+$buildRoot  = Join-Path $projectDir "obj"
+$outputZip  = Join-Path $projectDir "HelloZygisk.zip"
+$moduleDir  = Join-Path $projectDir "module"
+$zygiskDir  = Join-Path $moduleDir  "zygisk"
+
+# Toolchain file (ensure forward slashes or correct path)
+$toolchain = Join-Path $ndkPath "build\cmake\android.toolchain.cmake"
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host " Zygisk Module Builder v1.0" -ForegroundColor Cyan
+Write-Host " Zygisk Builder (Stable)" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "CMake: $cmakeExe"
+Write-Host "NDK:   $ndkPath"
 Write-Host ""
-Write-Host "[*] Project: $projectDir" -ForegroundColor Gray
-Write-Host "[*] NDK: $ndkPath" -ForegroundColor Gray
-Write-Host ""
 
-# ========== Step 1: Compile ==========
-Write-Host "[1/3] Compiling C++ code..." -ForegroundColor Yellow
+# ========== Build Loop ==========
+$abis = @("arm64-v8a") # Add others if needed: "armeabi-v7a", "x86", "x86_64"
 
-Push-Location $projectDir # Push-Location是将当前目录压入栈中
-# 因为ndk-build需要在项目目录下执行，否则会找不到Android.mk
-# 压入PowerShell的栈，压栈后，当前目录会变成项目目录
-try {
-    & $ndkBuild NDK_PROJECT_PATH=$projectDir APP_BUILD_SCRIPT="$projectDir\jni\Android.mk" NDK_APPLICATION_MK="$projectDir\jni\Application.mk" -j4 # j4是并行编译的线程数
-    if ($LASTEXITCODE -ne 0) {
-        throw "Compilation failed"
+foreach ($abi in $abis) {
+    Write-Host ">>> Building for $abi..." -ForegroundColor Yellow
+    $buildDir = Join-Path $buildRoot $abi
+    
+    # Clean previous build if needed (Optional: remove Force if too slow)
+    # if (Test-Path $buildDir) { Remove-Item -Recurse -Force $buildDir }
+
+    # 1. Configure (Using -S and -B for out-of-source build)
+    # We pass all arguments explicitly
+    $configArgs = @(
+        "-G", "Ninja",
+        "-S", $cppDir,
+        "-B", $buildDir,
+        "-DCMAKE_TOOLCHAIN_FILE=$toolchain",
+        "-DANDROID_NDK=$ndkPath",
+        "-DANDROID_ABI=$abi",
+        "-DANDROID_PLATFORM=android-35",
+        "-DANDROID_STL=c++_static",
+        "-DCMAKE_BUILD_TYPE=Release"
+    )
+    
+    try {
+        & $cmakeExe $configArgs
+        if ($LASTEXITCODE -ne 0) { throw "Configuration failed" }
+
+        # 2. Build
+        & $cmakeExe --build $buildDir
+        if ($LASTEXITCODE -ne 0) { throw "Build failed" }
     }
-    Write-Host "[OK] Compilation successful!" -ForegroundColor Green
-}
-catch {
-    Write-Host "[FAIL] Compilation failed: $_" -ForegroundColor Red
-    Pop-Location
-    exit 1
-}
-Pop-Location
+    catch {
+        Write-Host "[FAIL] $_" -ForegroundColor Red
+        exit 1
+    }
 
-# ========== Step 2: Copy .so files ==========
-Write-Host "[2/3] Assembling module files..." -ForegroundColor Yellow
-
-$zygiskDir = Join-Path $moduleDir "zygisk" # moduleDir是module目录
-if (-not (Test-Path $zygiskDir)) {
-    New-Item -ItemType Directory -Path $zygiskDir -Force | Out-Null
-}
-
-# Copy compiled .so file
-$soFile = Join-Path $projectDir "libs\arm64-v8a\libhellozygisk.so"
-if (Test-Path $soFile) {
-    Copy-Item $soFile (Join-Path $zygiskDir "arm64-v8a.so") -Force
-    Write-Host "   [OK] Copied arm64-v8a.so" -ForegroundColor Gray
-}
-else {
-    Write-Host "   [WARN] arm64-v8a .so file not found" -ForegroundColor Yellow
-}
-
-# Copy other architectures if available
-$otherArchs = @("armeabi-v7a", "x86", "x86_64") # @是数组
-foreach ($arch in $otherArchs) {
-    $archSo = Join-Path $projectDir "libs\$arch\libhellozygisk.so"
-    if (Test-Path $archSo) {
-        Copy-Item $archSo (Join-Path $zygiskDir "$arch.so") -Force
-        Write-Host "   [OK] Copied $arch.so" -ForegroundColor Gray
+    # 3. Install
+    $builtSo = Join-Path $buildDir "libhellozygisk.so"
+    if (-not (Test-Path $zygiskDir)) { New-Item -ItemType Directory -Path $zygiskDir -Force | Out-Null }
+    
+    if (Test-Path $builtSo) {
+        Copy-Item $builtSo (Join-Path $zygiskDir "$abi.so") -Force
+        Write-Host "   [OK] Installed $abi.so" -ForegroundColor Green
+    } else {
+        Write-Host "   [ERR] .so file missing at $builtSo" -ForegroundColor Red
+        exit 1
     }
 }
 
-Write-Host "[OK] Module files assembled!" -ForegroundColor Green
+# ========== Packaging ==========
+if (Test-Path $outputZip) { Remove-Item $outputZip -Force }
 
-# ========== Step 3: Package ZIP ==========
-Write-Host "[3/3] Packaging Magisk module..." -ForegroundColor Yellow
-
-# Delete old zip
-if (Test-Path $outputZip) {
-    Remove-Item $outputZip -Force
-}
-
-# Use tar instead of Compress-Archive to get correct path separators
-Push-Location $moduleDir
-tar -a -cf $outputZip * # -a是归档，-c是创建，-f是文件
-Pop-Location
+Write-Host ">>> Packaging..." -ForegroundColor Yellow
+pushd $moduleDir
+tar -a -cf $outputZip *
+popd
 
 if (Test-Path $outputZip) {
-    $zipSize = (Get-Item $outputZip).Length / 1KB
-    Write-Host "[OK] Package complete!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "============================================" -ForegroundColor Cyan
-    Write-Host " BUILD SUCCESSFUL!" -ForegroundColor Green
-    Write-Host "============================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "[*] Output: $outputZip" -ForegroundColor White
-    Write-Host "[*] Size: $([math]::Round($zipSize, 2)) KB" -ForegroundColor White
-    # Round是四舍五入
-    Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Yellow
-    Write-Host "   1. adb push HelloZygisk.zip /sdcard/Download/" -ForegroundColor Gray
-    Write-Host "   2. Magisk App -> Modules -> Install from storage" -ForegroundColor Gray
-    Write-Host "   3. Reboot phone" -ForegroundColor Gray
-    Write-Host "   4. adb logcat -s HelloZygisk" -ForegroundColor Gray
-}
-else {
-    Write-Host "[FAIL] Packaging failed" -ForegroundColor Red
-    exit 1
+    Write-Host "[SUCCESS] $outputZip" -ForegroundColor Green
+} else {
+    Write-Host "[FAIL] Zip creation failed" -ForegroundColor Red
 }
