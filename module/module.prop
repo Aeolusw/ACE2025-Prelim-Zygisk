@@ -1,6 +1,6 @@
-id=hellozygisk
-name=Hello Zygisk
-version=v1.0.0
+id=ace2025_prelim
+name=ACE2025 Prelim Challenge
+version=v1.0
 versionCode=1
-author=GameSecurityLearner
-description=ACE2025 Android Preliminary Solution using Zygisk and ShadowHook (Inline Hook).
+author=ACE_Challenger
+description=Tencent Game Security Competition 2025 - Android Prelim Solution

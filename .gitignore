@@ -1,20 +1,39 @@
-# Build artifacts
-libs/
-obj/
+# Gradle files
+.gradle/
+build/
+out/
+
+# Android/Common
 bin/
 gen/
-build/
+libs/
+obj/
 .cxx/
+.externalNativeBuild/
 cmake-build-*/
+*.apk
+*.aar
+*.aab
+*.so
+
+# Setup specific
+local.properties
+
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+*.swp
 *.zip
 HelloZygisk.zip
 
-# IDE / Editor
-.vscode/
-.idea/
-*.iml
-local.properties
+# Logs
+*.log
+build_log.txt
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Reference Materials (as per user context)
+zygisk-module-sample/
