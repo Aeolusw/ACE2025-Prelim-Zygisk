@@ -3,4 +3,4 @@ name=Hello Zygisk
 version=v1.0.0
 versionCode=1
 author=GameSecurityLearner
-description=ACE2025 Android Preliminary Solution using Zygisk (dl_iterate_phdr + plt_hook).
+description=ACE2025 Android Preliminary Solution using Zygisk and ShadowHook (Inline Hook).
