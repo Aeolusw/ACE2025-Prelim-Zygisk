@@ -5,7 +5,10 @@ project(hellozygisk)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(${PROJECT_NAME} SHARED main.cpp)
+add_library(${PROJECT_NAME} SHARED 
+    main.cpp
+    hacks.cpp
+)
 
 # 2. 核心 Flags
 # Zygisk 模块通常需要隐藏符号，只暴露特定的入口点

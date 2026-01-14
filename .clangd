@@ -1,6 +1,6 @@
 CompileFlags:
   # 指定 NDK 编译器路径 (确保路径正确)
-  Compiler: C:/Users/HP/AppData/Local/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe
+  Compiler: C:/Users/HP/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe
   
   Add:
     # 目标架构 (ARM64) 和 API Level
@@ -14,9 +14,9 @@ CompileFlags:
     - -D__aarch64__
     
     # NDK 头文件路径 (Core)
-    - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include
+    - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include
     # NDK 头文件路径 (Arch-specific)
-    - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android
+    - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android
 
 Diagnostics:
   # 忽略 Windows 上不相关的驱动告警
