@@ -1,0 +1,3 @@
+[submodule "external/shadowhook"]
+	path = external/shadowhook
+	url = https://github.com/Aeolusw/android-inline-hook

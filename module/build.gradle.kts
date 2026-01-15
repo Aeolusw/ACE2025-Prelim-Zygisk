@@ -14,7 +14,10 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags("-std=c++20")
-                arguments("-DANDROID_STL=c++_static")
+                arguments(
+                    "-DANDROID_STL=c++_static",
+                    "-DPROJECT_ROOT=${rootProject.projectDir}"
+                )
                 abiFilters("arm64-v8a")
             }
         }
@@ -51,15 +54,15 @@ tasks.register<Zip>("packageZygisk") {
     from(file("module.prop"))
     
     into("zygisk") {
-        // Path to the stripped native library
-        from(layout.buildDirectory.dir("intermediates/native_libs/release/out/lib/arm64-v8a")) {
-             // In some AGP versions it might be different, but native_libs or stripped_native_libs is common.
-             // Using 'native_libs' is safer than 'stripped' if we want to be sure it exists, 
-             // but 'stripped' is better for size. Let's try stripped first.
-        }
-        from(layout.buildDirectory.dir("intermediates/stripped_native_libs/release/out/lib/arm64-v8a")) {
-            include("**/*.so")
+        from(layout.buildDirectory.dir("intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a")) {
+            include("libhellozygisk.so")
             rename { "arm64-v8a.so" }
+        }
+    }
+
+    into("system/lib64") {
+        from(layout.buildDirectory.dir("intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a")) {
+            include("libshadowhook_nothing.so")
         }
     }
     

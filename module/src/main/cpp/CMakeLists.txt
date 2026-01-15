@@ -5,6 +5,18 @@ project(hellozygisk)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ============================================
+# ShadowHook 集成
+# [Interview Note] 字节跳动的 Inline Hook 框架
+# ============================================
+set(SHADOWHOOK_DIR ${PROJECT_ROOT}/external/shadowhook/shadowhook/src/main/cpp)
+
+# 添加 ShadowHook 作为子项目编译
+add_subdirectory(${SHADOWHOOK_DIR} ${CMAKE_CURRENT_BINARY_DIR}/shadowhook)
+
+# ============================================
+# 主模块
+# ============================================
 add_library(${PROJECT_NAME} SHARED 
     main.cpp
     hacks.cpp
@@ -23,14 +35,17 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # 5. 包含头文件路径
 target_include_directories(${PROJECT_NAME} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${SHADOWHOOK_DIR}/include  # ShadowHook 头文件
 )
 
 # 6. 链接库
 # android: Android 系统库
 # log: 安卓日志库
 # atomic: 原子操作库 (防止某些架构编译不过)
+# shadowhook: 字节跳动 Inline Hook 库
 target_link_libraries(${PROJECT_NAME}
     android
     log
     atomic
+    shadowhook
 )

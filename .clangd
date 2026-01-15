@@ -17,6 +17,9 @@ CompileFlags:
     - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include
     # NDK 头文件路径 (Arch-specific)
     - -IC:/Users/HP/AppData/Local/Android/Sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android
+    
+    # ShadowHook 头文件路径
+    - -ID:/0Document/pgm/Android/ACE2025-Prelim-Zygisk/external/shadowhook/shadowhook/src/main/cpp/include
 
 Diagnostics:
   # 忽略 Windows 上不相关的驱动告警
