@@ -19,10 +19,31 @@ std::string getName(uintptr_t objAddr) {
   if (g_GName == 0)
     return "None";
 
-  /* 🛑 YOUR_TASK: Implement FName parsing logic here
-     Hint: See solve_aim.js:16
-     Need to read fNameId, calculate block/offset, read chunk, read header/len
+  /* 🛑 填空题: 实现 FName 解析逻辑
+     提示: 参考 solve_aim.js:16-32
+     步骤:
+     1. 从 objAddr + 0x18 读取 fNameId
+     2. 计算 block = fNameId >> 16, offset = fNameId & 0xFFFF
+     3. 从 GName + 0x30 获取 fNamePool
+     4. 读取 chunk = fNamePool + 0x10 + block * 8
+     5. 计算 entry = chunk + 2 * offset
+     6. 读取 header 并解析 len = header >> 6
+     7. 从 entry + 2 读取 len 个字符作为名称
   */
+  auto fNameId = readU32(objAddr + 0x18);
+  auto block = fNameId >> 16;
+  auto offset = fNameId & 0xFFFF;
+  auto fNamePool = g_GName + 0x30;
+
+  auto chunk = readPtr(fNamePool + 0x10 + block * 8);
+  auto entry = chunk + 2 * offset;
+
+  auto header = readU16(entry);
+  auto len = header >> 6;
+  if (len > 0 && len < 100) {
+    // String is at entry + 2
+    return std::string((char *)(entry + 2), len);
+  }
 
   // Placeholder return to allow compilation
   return "Unknown";
@@ -36,29 +57,28 @@ static void *g_stub_spawn = nullptr;
 // acc, void* rotation)
 // 定义原函数签名: AActor* SpawnProjectile(this, context, acc, rotationPtr,
 // arg4)
-static void *(*orig_SpawnProjectile)(void *, void *, void *, void *,
+static void *(*orig_SpawnProjectile)(void *, void *, void *, void *, void *,
                                      void *) = nullptr;
+void *HOOK_SpawnProjectile(void *thisPtr, void *arg1, void *arg2, void *arg3,
+                           void *arg4, void *arg5) {
+  // arg3 = rotationPtr (UE4: FRotator*)
+  void *rotationPtr = arg3;
 
-void *HOOK_SpawnProjectile(void *thisPtr, void *worldContext, void *acc,
-                           void *rotationPtr, void *arg4) {
-  // [Debug]
-  LOGD("SpawnProjectile called! this: %p, rot: %p, arg4: %p", thisPtr,
-       rotationPtr, arg4);
+  // Aimbot 逻辑: 只有找到 PlayerController 且 rotationPtr 有效时才执行
+  if (g_PlayerController != 0 && rotationPtr != nullptr) {
+    // 读取玩家当前视角 (ControlRotation)
+    auto ctrlRotPtr = g_PlayerController + 0x288;
+    auto pitch = readFloat(ctrlRotPtr);
+    auto yaw = readFloat(ctrlRotPtr + 4);
 
-  // 1. 安全检查: 确保 rotationPtr 不是空指针
-  // 2. 逻辑介入: 如果找到了 PlayerController，就读取它的 ControlRotation 并覆盖
-  // rotationPtr
-  if (rotationPtr != nullptr && g_PlayerController != 0) {
-    // 这里的 g_PlayerController 需要在 gameLogicLoop 中通过扫描 Actor 列表获得
-    // 为了验证功能，我们先确保如果是值传递闪退，加了检查就不该崩
-
-    // 读取逻辑需要稍后实现，目前先透传，验证签名修复后的稳定性
+    // 强行修正子弹发射角度 (Aimbot)
+    writeFloat((uintptr_t)rotationPtr, pitch);
+    writeFloat((uintptr_t)rotationPtr + 4, yaw);
   }
 
-  // 必须确保原函数被调用，且参数原封不动
-  // 并且要接住返回值！
+  // 调用原函数
   if (orig_SpawnProjectile) {
-    return orig_SpawnProjectile(thisPtr, worldContext, acc, rotationPtr, arg4);
+    return orig_SpawnProjectile(thisPtr, arg1, arg2, arg3, arg4, arg5);
   }
   return nullptr;
 }
@@ -90,10 +110,12 @@ void gameLogicLoop(uintptr_t base) {
   g_GName = base + Game::GName_Offset;
 
   uintptr_t pGWorld = 0;
+  // 轮询等待游戏世界对象初始化，避免访问空指针
   while (true) {
     // 读取 GWorld 指针
     // pGWorld = *(uintptr_t*)(base + Game::GWorld_Offset);
     /* 🛑 YOUR_TASK: Read GWorld safely */
+    pGWorld = readPtr(base + Game::GWorld_Offset);
 
     if (pGWorld != 0) {
       LOGI("GWorld initialized: %p", (void *)pGWorld);
@@ -103,8 +125,45 @@ void gameLogicLoop(uintptr_t base) {
   }
 
   // 遍历 Actor (Level -> ActorsArray)
-  // See solve_aim.js:65
-  /* 🛑 YOUR_TASK: Implement Actor Iteration Loop */
+  // See solve_aim.js:65-95
+  /* 🛑 填空题: 实现 Actor 遍历循环
+     提示: 参考 solve_aim.js:65-95
+     步骤:
+     1. 从 pGWorld + 0x30 读取 Level 指针
+     2. 从 Level + 0x98 读取 ActorsArray 指针
+     3. 从 Level + 0x98 + 8 读取 ActorsCount
+     4. 循环遍历: actor = actorsArray + i * 8
+     5. 对每个 actor 调用 getName() 获取名称
+     6. 如果是 "FirstPersonCharacter" -> 修复 GunOffset（见下方填空）
+     7. 如果是 "PlayerController" -> 保存到 g_PlayerController
+  */
+  auto level = readPtr(pGWorld + 0x30);
+  auto actorsArray = readPtr(level + 0x98);
+  auto actorsCount = readU32(level + 0x98 + 8);
+
+  for (uint32_t i = 0; i < actorsCount; i++) {
+    auto actor = readPtr(actorsArray + i * 8);
+    if (actor == 0)
+      continue;
+
+    auto name = getName(actor);
+
+    // 1. 找到 FirstPersonCharacter -> 修复 GunOffset
+    if (name.find("FirstPersonCharacter") != std::string::npos) {
+      LOGI("[!] Found FirstPersonCharacter @ %p, fixing GunOffset",
+           (void *)actor);
+      // GunOffset @ 0x500 (Vector3: 0, 0, 10)
+      writeFloat(actor + 0x500, 0.0f);
+      writeFloat(actor + 0x500 + 4, 0.0f);
+      writeFloat(actor + 0x500 + 8, 10.0f);
+    }
+
+    // 2. 找到 PlayerController -> 保存
+    if (name.find("PlayerController") != std::string::npos) {
+      LOGI("[!] Found PlayerController @ %p", (void *)actor);
+      g_PlayerController = actor;
+    }
+  }
 }
 
 // 导出给 main.cpp 调用的入口
@@ -114,8 +173,8 @@ void hack_thread() {
   LOGI("============================================");
 
   // 初始化 ShadowHook
-  // 改为 SHARED 模式 (0)，兼容性更好
-  if (!initShadowHook(0)) {
+  // 尝试 UNIQUE 模式 (1)
+  if (!initShadowHook(SHADOWHOOK_MODE_UNIQUE)) {
     LOGE("[!] ShadowHook 初始化失败，无法继续");
     return;
   }
@@ -128,9 +187,13 @@ void hack_thread() {
 
   LOGI("[*] 成功定位 libUE4.so 基址: %p", (void *)base);
 
-  // 1. 启动 Hook
+  // 1. 先安装 Hook（和 JS 脚本顺序一致）
+  // 这样从一开始就能捕获所有 SpawnProjectile 调用
   hookSpawnProjectile(base);
 
-  // 2. 启动游戏逻辑循环 (找 Actor, 修复 GunOffset)
+  // 2. 运行游戏逻辑循环 (找 Actor, 修复 GunOffset, 找 PlayerController)
   gameLogicLoop(base);
+
+  LOGI("[*] gameLogicLoop 完成: PlayerController=%p",
+       (void *)g_PlayerController);
 }
