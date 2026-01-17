@@ -1,10 +1,15 @@
 #pragma once
 #include <android/log.h>
 #include <chrono>
+#include <concepts>
 #include <fstream>
 #include <link.h>
+#include <optional>
+#include <span>
 #include <string>
+#include <sys/uio.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 // Start: 基础设施区域 (Green Zone)
@@ -43,8 +48,46 @@ inline uintptr_t getModuleBase(const char *moduleName) {
 // 模拟 Frida 风格的 API，减少重复 memcpy
 // ============================================
 
-// 通用模板：从地址读取任意 POD 类型
-template <typename T> inline T readMem(uintptr_t addr) {
+// C++20 Concept: 约束模板只接受 trivially copyable 类型
+template <typename T>
+concept MemReadable = std::is_trivially_copyable_v<T>;
+
+// ============================================
+// Safe Memory Reader (Kernel-Assisted)
+// ============================================
+
+// 内部实现：利用 syscall 探测内存有效性
+inline bool safeReadBuffer(uintptr_t addr, void *buffer, size_t size) {
+  struct iovec local_iov = {buffer, size};
+  struct iovec remote_iov = {reinterpret_cast<void *>(addr), size};
+
+  // process_vm_readv 读取自身内存，若 addr 无效返回 -1 而非崩溃
+  ssize_t nread = process_vm_readv(getpid(), &local_iov, 1, &remote_iov, 1, 0);
+
+  return nread == static_cast<ssize_t>(size);
+}
+
+// 配合 std::optional 的安全读取
+template <MemReadable T> inline std::optional<T> tryReadMem(uintptr_t addr) {
+  T val{};
+  if (safeReadBuffer(addr, &val, sizeof(T))) {
+    return val;
+  }
+  return std::nullopt;
+}
+
+// 读取非空指针：地址无效或值为0都返回 nullopt
+// 专门用于 GWorld/Actor 这种一定要非空的场景
+inline std::optional<uintptr_t> tryReadNonZeroPtr(uintptr_t addr) {
+  auto valOpt = tryReadMem<uintptr_t>(addr);
+  if (!valOpt || *valOpt == 0) {
+    return std::nullopt;
+  }
+  return valOpt;
+}
+
+// 快速版本：仅用于 100% 确定有效的地址（如基址偏移）
+template <MemReadable T> inline T readMem(uintptr_t addr) {
   T val{};
   memcpy(&val, reinterpret_cast<void *>(addr), sizeof(T));
   return val;
@@ -59,10 +102,18 @@ inline uintptr_t readPtr(uintptr_t addr) { return readMem<uintptr_t>(addr); }
 inline float readFloat(uintptr_t addr) { return readMem<float>(addr); }
 
 // 写入内存
-template <typename T> inline void writeMem(uintptr_t addr, const T &val) {
+template <MemReadable T> inline void writeMem(uintptr_t addr, const T &val) {
   memcpy(reinterpret_cast<void *>(addr), &val, sizeof(T));
 }
 
 inline void writeFloat(uintptr_t addr, float val) {
   writeMem<float>(addr, val);
+}
+
+// ============================================
+// Span 遍历辅助 (Actor Array)
+// ============================================
+
+inline std::span<uintptr_t> makeActorSpan(uintptr_t arrayAddr, size_t count) {
+  return {reinterpret_cast<uintptr_t *>(arrayAddr), count};
 }

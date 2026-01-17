@@ -13,11 +13,9 @@ uintptr_t g_GName = 0;
 
 // [Interview Trap] FName 的解密算法是各大厂面试常考题
 // 这里你需要根据 JS 里的 getName 手写 C++ 版本
-std::string getName(uintptr_t objAddr) {
-  if (objAddr == 0)
-    return "None";
-  if (g_GName == 0)
-    return "None";
+std::optional<std::string> getName(uintptr_t objAddr) {
+  if (objAddr == 0 || g_GName == 0)
+    return std::nullopt;
 
   /* 🛑 填空题: 实现 FName 解析逻辑
      提示: 参考 solve_aim.js:16-32
@@ -41,12 +39,10 @@ std::string getName(uintptr_t objAddr) {
   auto header = readU16(entry);
   auto len = header >> 6;
   if (len > 0 && len < 100) {
-    // String is at entry + 2
     return std::string((char *)(entry + 2), len);
   }
 
-  // Placeholder return to allow compilation
-  return "Unknown";
+  return std::nullopt;
 }
 
 #include "shadowhook_wrapper.hpp"
@@ -141,18 +137,20 @@ void gameLogicLoop(uintptr_t base) {
   auto actorsArray = readPtr(level + 0x98);
   auto actorsCount = readU32(level + 0x98 + 8);
 
-  for (uint32_t i = 0; i < actorsCount; i++) {
-    auto actor = readPtr(actorsArray + i * 8);
+  // 使用 std::span 遍历 Actor 数组
+  for (auto actor : makeActorSpan(actorsArray, actorsCount)) {
     if (actor == 0)
       continue;
 
-    auto name = getName(actor);
+    auto nameOpt = getName(actor);
+    if (!nameOpt)
+      continue;
+    const auto &name = *nameOpt;
 
     // 1. 找到 FirstPersonCharacter -> 修复 GunOffset
     if (name.find("FirstPersonCharacter") != std::string::npos) {
       LOGI("[!] Found FirstPersonCharacter @ %p, fixing GunOffset",
            (void *)actor);
-      // GunOffset @ 0x500 (Vector3: 0, 0, 10)
       writeFloat(actor + 0x500, 0.0f);
       writeFloat(actor + 0x500 + 4, 0.0f);
       writeFloat(actor + 0x500 + 8, 10.0f);

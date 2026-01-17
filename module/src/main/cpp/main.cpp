@@ -5,6 +5,7 @@
 
 #include "utils.hpp"
 #include "zygisk.hpp"
+#include <string_view>
 
 // 声明 hack_thread (在 hacks.cpp 中实现)
 extern void hack_thread();
@@ -21,8 +22,8 @@ public:
       return;
     const char *pkg = env_->GetStringUTFChars(args->nice_name, nullptr);
     if (pkg) {
-      // [Interview Note] 这种字符串比较效率较低，实际场景可用 Hash 对比
-      if (strcmp(pkg, "com.ACE2025.Game") == 0) {
+      // [Interview Note] string_view 避免不必要的拷贝，比 strcmp 更安全
+      if (std::string_view{pkg} == "com.ACE2025.Game") {
         shouldHook_ = true;
         LOGI("[Zygisk] 锁定目标: %s", pkg);
       }
