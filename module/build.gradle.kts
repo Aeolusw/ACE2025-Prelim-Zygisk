@@ -3,13 +3,12 @@ plugins {
 }
 
 android {
-    namespace = "com.tencent.ace2025.client"
+    namespace = "com.tencent.ace2025.prelim"
     compileSdk = 34
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
         minSdk = 26
-        targetSdk = 30
         
         externalNativeBuild {
             cmake {
